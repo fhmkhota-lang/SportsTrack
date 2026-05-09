@@ -1,84 +1,66 @@
 /* ==================================================================
-   The Pitch — multi-league football tracker
+   The Pitch — football tracker (TheSportsDB edition)
    ------------------------------------------------------------------
-   - Caches every endpoint with TTL appropriate to its update rate
-   - Tracks daily request count (resets at 00:00 UTC)
-   - Stores API key in localStorage only (never committed to repo)
-   - Supports leagues AND cups (handles no-standings gracefully)
+   - Uses TheSportsDB's free public API (key: 123, no signup needed)
+   - Caches each endpoint with a sensible TTL to be polite (and fast)
+   - Stores no API key (free tier needs none) but allows premium upgrade
    ================================================================== */
 
-const API_BASE = 'https://v3.football.api-sports.io';
+const API_BASE = 'https://www.thesportsdb.com/api/v1/json';
+const FREE_KEY = '123';
 
 /* ------------------------------------------------------------------
-   League catalogue
-   ------------------------------------------------------------------
-   API-Football's league IDs are stable across seasons.
-     type: 'league' has standings + top scorers/assists
-     type: 'cup'    usually no league standings (groups instead)
-     seasonStyle:
-       'aug-may'    European calendar (Aug start)
-       'mar-nov'    South American / MLS calendar (Mar start)
-       'tournament' single-year tournaments (World Cup, Euros)
+   League catalogue (TheSportsDB IDs)
    ------------------------------------------------------------------ */
 const LEAGUES = [
   // South Africa
-  { id: 288, name: 'Premier Soccer League',     short: 'PSL',          country: 'South Africa', flag: '🇿🇦', type: 'league', seasonStyle: 'aug-may',    group: 'South Africa' },
-  { id: 289, name: 'National First Division',   short: 'NFD',          country: 'South Africa', flag: '🇿🇦', type: 'league', seasonStyle: 'aug-may',    group: 'South Africa' },
+  { id: 4802, name: 'Premier Soccer League', short: 'PSL', flag: '🇿🇦', group: 'South Africa', seasonStyle: 'aug-may' },
 
   // England
-  { id: 39,  name: 'Premier League',            short: 'EPL',          country: 'England',      flag: '🏴', type: 'league', seasonStyle: 'aug-may',    group: 'England' },
-  { id: 40,  name: 'Championship',              short: 'Champ.',       country: 'England',      flag: '🏴', type: 'league', seasonStyle: 'aug-may',    group: 'England' },
-  { id: 45,  name: 'FA Cup',                    short: 'FA Cup',       country: 'England',      flag: '🏴', type: 'cup',    seasonStyle: 'aug-may',    group: 'England' },
-  { id: 48,  name: 'EFL Cup',                   short: 'EFL Cup',      country: 'England',      flag: '🏴', type: 'cup',    seasonStyle: 'aug-may',    group: 'England' },
+  { id: 4328, name: 'Premier League',        short: 'EPL',     flag: '🏴', group: 'England', seasonStyle: 'aug-may' },
+  { id: 4329, name: 'Championship',          short: 'Champ.',  flag: '🏴', group: 'England', seasonStyle: 'aug-may' },
+  { id: 4482, name: 'FA Cup',                short: 'FA Cup',  flag: '🏴', group: 'England', seasonStyle: 'aug-may', type: 'cup' },
 
-  // Top European leagues
-  { id: 140, name: 'La Liga',                   short: 'La Liga',      country: 'Spain',        flag: '🇪🇸', type: 'league', seasonStyle: 'aug-may',    group: 'Europe' },
-  { id: 135, name: 'Serie A',                   short: 'Serie A',      country: 'Italy',        flag: '🇮🇹', type: 'league', seasonStyle: 'aug-may',    group: 'Europe' },
-  { id: 78,  name: 'Bundesliga',                short: 'Bundes.',      country: 'Germany',      flag: '🇩🇪', type: 'league', seasonStyle: 'aug-may',    group: 'Europe' },
-  { id: 61,  name: 'Ligue 1',                   short: 'Ligue 1',      country: 'France',       flag: '🇫🇷', type: 'league', seasonStyle: 'aug-may',    group: 'Europe' },
-  { id: 88,  name: 'Eredivisie',                short: 'Eredivisie',   country: 'Netherlands',  flag: '🇳🇱', type: 'league', seasonStyle: 'aug-may',    group: 'Europe' },
-  { id: 94,  name: 'Primeira Liga',             short: 'Liga POR',     country: 'Portugal',     flag: '🇵🇹', type: 'league', seasonStyle: 'aug-may',    group: 'Europe' },
+  // Europe
+  { id: 4335, name: 'La Liga',               short: 'La Liga',     flag: '🇪🇸', group: 'Europe', seasonStyle: 'aug-may' },
+  { id: 4332, name: 'Serie A',               short: 'Serie A',     flag: '🇮🇹', group: 'Europe', seasonStyle: 'aug-may' },
+  { id: 4331, name: 'Bundesliga',            short: 'Bundes.',     flag: '🇩🇪', group: 'Europe', seasonStyle: 'aug-may' },
+  { id: 4334, name: 'Ligue 1',               short: 'Ligue 1',     flag: '🇫🇷', group: 'Europe', seasonStyle: 'aug-may' },
+  { id: 4337, name: 'Eredivisie',            short: 'Eredivisie',  flag: '🇳🇱', group: 'Europe', seasonStyle: 'aug-may' },
 
-  // UEFA & continental
-  { id: 2,   name: 'UEFA Champions League',     short: 'UCL',          country: 'Europe',       flag: '🏆', type: 'cup',    seasonStyle: 'aug-may',    group: 'Continental' },
-  { id: 3,   name: 'UEFA Europa League',        short: 'UEL',          country: 'Europe',       flag: '🏆', type: 'cup',    seasonStyle: 'aug-may',    group: 'Continental' },
-  { id: 848, name: 'UEFA Europa Conf. League',  short: 'UECL',         country: 'Europe',       flag: '🏆', type: 'cup',    seasonStyle: 'aug-may',    group: 'Continental' },
-  { id: 12,  name: 'CAF Champions League',      short: 'CAF CL',       country: 'Africa',       flag: '🌍', type: 'cup',    seasonStyle: 'aug-may',    group: 'Continental' },
+  // Continental & international
+  { id: 4480, name: 'UEFA Champions League', short: 'UCL',          flag: '🏆', group: 'Continental',   seasonStyle: 'aug-may',    type: 'cup' },
+  { id: 4481, name: 'UEFA Europa League',    short: 'UEL',          flag: '🏆', group: 'Continental',   seasonStyle: 'aug-may',    type: 'cup' },
+  { id: 5071, name: 'UEFA Conference League',short: 'UECL',         flag: '🏆', group: 'Continental',   seasonStyle: 'aug-may',    type: 'cup' },
+  { id: 4429, name: 'FIFA World Cup',        short: 'World Cup',    flag: '🌐', group: 'International', seasonStyle: 'tournament', type: 'cup' },
+  { id: 4496, name: 'Africa Cup of Nations', short: 'AFCON',        flag: '🌍', group: 'International', seasonStyle: 'tournament', type: 'cup' },
+  { id: 4499, name: 'Copa America',          short: 'Copa America', flag: '🌐', group: 'International', seasonStyle: 'tournament', type: 'cup' },
 
-  // International
-  { id: 1,   name: 'World Cup',                 short: 'World Cup',    country: 'World',        flag: '🌐', type: 'cup',    seasonStyle: 'tournament', group: 'International' },
-  { id: 4,   name: 'European Championship',     short: 'Euros',        country: 'Europe',       flag: '🌐', type: 'cup',    seasonStyle: 'tournament', group: 'International' },
-  { id: 6,   name: 'Africa Cup of Nations',     short: 'AFCON',        country: 'Africa',       flag: '🌐', type: 'cup',    seasonStyle: 'tournament', group: 'International' },
-  { id: 9,   name: 'Copa America',              short: 'Copa America', country: 'South America',flag: '🌐', type: 'cup',    seasonStyle: 'tournament', group: 'International' },
-
-  // Other notable leagues
-  { id: 71,  name: 'Brasileirão Série A',       short: 'Brasil A',     country: 'Brazil',       flag: '🇧🇷', type: 'league', seasonStyle: 'mar-nov',    group: 'Americas' },
-  { id: 128, name: 'Liga Profesional Argentina',short: 'Argentina',    country: 'Argentina',    flag: '🇦🇷', type: 'league', seasonStyle: 'mar-nov',    group: 'Americas' },
-  { id: 253, name: 'Major League Soccer',       short: 'MLS',          country: 'USA',          flag: '🇺🇸', type: 'league', seasonStyle: 'mar-nov',    group: 'Americas' }
+  // Americas
+  { id: 4351, name: 'Brasileirão Série A',   short: 'Brasil A', flag: '🇧🇷', group: 'Americas', seasonStyle: 'mar-nov' },
+  { id: 4346, name: 'Major League Soccer',   short: 'MLS',      flag: '🇺🇸', group: 'Americas', seasonStyle: 'mar-nov' }
 ];
 
-const DEFAULT_LEAGUE_ID = 288; // PSL
+const DEFAULT_LEAGUE_ID = 4802; // PSL
 
+/* TTLs — TheSportsDB free has soft rate limits, cache generously */
 const TTL = {
-  leagues:   24 * 60 * 60 * 1000,
-  standings:      60 * 60 * 1000,
-  fixtures:    6 * 60 * 60 * 1000,
-  live:           60 * 1000,
-  topscorers: 12 * 60 * 60 * 1000,
-  topassists: 12 * 60 * 60 * 1000
+  table:    60 * 60 * 1000,        // 1 hour
+  events:   30 * 60 * 1000,        // 30 minutes (next/past events)
+  livescore:     60 * 1000         // 1 minute
 };
 
 /* ------------------------------------------------------------------
    Storage
    ------------------------------------------------------------------ */
 const LS = {
-  KEY:          'pitch.apikey',
-  LEAGUE_ID:    'pitch.league.id',
-  CACHE_PREFIX: 'pitch.cache.',
-  COUNTER:      'pitch.counter'
+  KEY:           'pitch.apikey',     // optional, only if user has premium
+  LEAGUE_ID:     'pitch.league.id',
+  CACHE_PREFIX:  'pitch.cache.'
 };
-const getKey   = () => localStorage.getItem(LS.KEY);
-const setKey   = (k) => localStorage.setItem(LS.KEY, k.trim());
+
+const getKey = () => localStorage.getItem(LS.KEY) || FREE_KEY;
+const setKey = (k) => localStorage.setItem(LS.KEY, k.trim());
 const clearKey = () => localStorage.removeItem(LS.KEY);
 
 function getLeagueId() {
@@ -91,48 +73,22 @@ function getLeague() {
 }
 
 /* ------------------------------------------------------------------
-   Season inference per league type
+   Season string per league type — TheSportsDB uses YYYY-YYYY
    ------------------------------------------------------------------ */
 function currentSeasonFor(league) {
   const now = new Date();
   const y = now.getFullYear();
-  const m = now.getMonth(); // 0-11
-  if (league.seasonStyle === 'tournament') return y;
-  if (league.seasonStyle === 'mar-nov')    return m >= 2 ? y : y - 1;
-  return m >= 7 ? y : y - 1; // aug-may default
-}
-
-/* ------------------------------------------------------------------
-   Quota counter
-   ------------------------------------------------------------------ */
-function todayUTC() {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${d.getUTCMonth()+1}-${d.getUTCDate()}`;
-}
-function getCounter() {
-  try {
-    const c = JSON.parse(localStorage.getItem(LS.COUNTER) || '{}');
-    if (c.day !== todayUTC()) return { day: todayUTC(), count: 0 };
-    return c;
-  } catch { return { day: todayUTC(), count: 0 }; }
-}
-function bumpCounter() {
-  const c = getCounter();
-  c.count += 1;
-  localStorage.setItem(LS.COUNTER, JSON.stringify(c));
-  renderQuota();
-}
-function renderQuota() {
-  const c = getCounter();
-  const limit = 100;
-  document.getElementById('quota-used').textContent = c.count;
-  document.getElementById('quota-limit').textContent = limit;
-  const pct = Math.min(100, (c.count / limit) * 100);
-  const fill = document.getElementById('quota-fill');
-  fill.style.width = pct + '%';
-  fill.style.background = pct >= 80
-    ? 'linear-gradient(135deg, #e5484d 0%, #b91c1c 100%)'
-    : 'linear-gradient(135deg, #ff5b1f 0%, #c2410c 100%)';
+  const m = now.getMonth();
+  if (league.seasonStyle === 'mar-nov') {
+    // Single-year season, mar-nov — Brazilian/MLS style
+    return String(m >= 2 ? y : y - 1);
+  }
+  // Everything else — including tournaments — uses cross-year format on
+  // TheSportsDB (e.g. "2024-2025", "2025-2026"). Tournaments have qualifying
+  // matches across multiple seasons, so the cross-year format actually fits.
+  // Aug–Dec → current year is the start; Jan–Jul → previous year is the start.
+  const start = m >= 7 ? y : y - 1;
+  return `${start}-${start + 1}`;
 }
 
 /* ------------------------------------------------------------------
@@ -151,228 +107,189 @@ function cacheSet(key, data, ttl) {
   try {
     localStorage.setItem(LS.CACHE_PREFIX + key,
       JSON.stringify({ exp: Date.now() + ttl, data }));
-  } catch { /* quota exceeded */ }
+  } catch { /* quota exceeded — silently skip */ }
 }
 
 async function apiGet(path, params = {}, ttl = 60_000, { force = false } = {}) {
   const qs = new URLSearchParams(params).toString();
   const cacheKey = `${path}?${qs}`;
+
   if (!force) {
     const cached = cacheGet(cacheKey);
     if (cached) return cached;
   }
-  const url = `${API_BASE}${path}${qs ? '?' + qs : ''}`;
-  const res = await fetch(url, { headers: { 'x-apisports-key': getKey() } });
-  bumpCounter();
-  if (res.status === 401 || res.status === 403)
-    throw new Error('Invalid API key. Click ⚙ Key to re-enter it.');
+
+  const url = `${API_BASE}/${getKey()}/${path}${qs ? '?' + qs : ''}`;
+  const res = await fetch(url);
+
   if (res.status === 429)
-    throw new Error('Daily quota exhausted. Try again after 00:00 UTC.');
+    throw new Error('TheSportsDB is rate-limiting. Wait a minute and try again.');
+  if (res.status === 401)
+    throw new Error('Invalid API key. Click ⚙ Key to clear it (free tier needs no key).');
   if (!res.ok) throw new Error(`API error: ${res.status}`);
+
   const json = await res.json();
-  if (json.errors && Object.keys(json.errors).length) {
-    const msg = typeof json.errors === 'object'
-      ? Object.values(json.errors).join(' · ')
-      : String(json.errors);
-    throw new Error('API: ' + msg);
-  }
   cacheSet(cacheKey, json, ttl);
   return json;
 }
 
 /* ------------------------------------------------------------------
-   API methods (scoped to current league)
+   API methods
    ------------------------------------------------------------------ */
-async function fetchStandings(force = false) {
+async function fetchTable(force = false) {
   const l = getLeague();
-  return apiGet('/standings', { league: l.id, season: currentSeasonFor(l) }, TTL.standings, { force });
+  return apiGet('lookuptable.php',
+    { l: l.id, s: currentSeasonFor(l) }, TTL.table, { force });
 }
-async function fetchFixtures({ from, to, force = false }) {
+async function fetchNextEvents(force = false) {
   const l = getLeague();
-  return apiGet('/fixtures',
-    { league: l.id, season: currentSeasonFor(l), from, to }, TTL.fixtures, { force });
+  return apiGet('eventsnextleague.php', { id: l.id }, TTL.events, { force });
 }
-async function fetchAllSeasonFixtures(force = false) {
+async function fetchPastEvents(force = false) {
   const l = getLeague();
-  return apiGet('/fixtures',
-    { league: l.id, season: currentSeasonFor(l) }, TTL.fixtures, { force });
+  return apiGet('eventspastleague.php', { id: l.id }, TTL.events, { force });
 }
-async function fetchLive(force = false) {
+async function fetchSeasonEvents(force = false) {
   const l = getLeague();
-  return apiGet('/fixtures', { live: String(l.id) }, TTL.live, { force });
-}
-async function fetchTopScorers(force = false) {
-  const l = getLeague();
-  return apiGet('/players/topscorers',
-    { league: l.id, season: currentSeasonFor(l) }, TTL.topscorers, { force });
-}
-async function fetchTopAssists(force = false) {
-  const l = getLeague();
-  return apiGet('/players/topassists',
-    { league: l.id, season: currentSeasonFor(l) }, TTL.topassists, { force });
+  return apiGet('eventsseason.php',
+    { id: l.id, s: currentSeasonFor(l) }, TTL.events, { force });
 }
 
 /* ------------------------------------------------------------------
    Renderers
    ------------------------------------------------------------------ */
-const fmtDate = (iso) =>
-  new Date(iso).toLocaleDateString('en-ZA',
+const fmtDate = (iso) => {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-ZA',
     { weekday: 'short', month: 'short', day: 'numeric' });
-const fmtTime = (iso) =>
-  new Date(iso).toLocaleTimeString('en-ZA',
-    { hour: '2-digit', minute: '2-digit' });
+};
+const fmtTime = (timeStr) => {
+  if (!timeStr) return '';
+  // TheSportsDB strTime is HH:MM:SS UTC
+  const [h, m] = timeStr.split(':');
+  const d = new Date();
+  d.setUTCHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
+  return d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+};
 
 function renderHeader() {
   const l = getLeague();
   document.getElementById('current-league-name').textContent = l.name;
   document.getElementById('current-league-meta').textContent =
-    `${l.country} · ${currentSeasonFor(l)} season`;
+    `Season ${currentSeasonFor(l)}`;
   const hint = document.getElementById('standings-meta');
-  if (hint) hint.textContent = `${l.name} · ${currentSeasonFor(l)} season`;
+  if (hint) hint.textContent = `${l.name} · season ${currentSeasonFor(l)}`;
 }
 
-function renderStandings(json) {
+function renderTable(json) {
   const tbody = document.querySelector('#standings-table tbody');
-  const data = json.response?.[0]?.league;
-  if (!data || !data.standings || !data.standings[0] || !data.standings[0].length) {
+  const rows = json?.table || [];
+  if (!rows.length) {
     const l = getLeague();
     const msg = l.type === 'cup'
-      ? 'This is a cup competition — check Fixtures and Results for the bracket.'
-      : 'No standings available yet for this season.';
+      ? 'This is a cup competition — no league table. Check Fixtures and Results for the bracket.'
+      : 'No standings data available for this season yet.';
     tbody.innerHTML = `<tr><td colspan="11" class="empty">${msg}</td></tr>`;
     return;
   }
-  const groups = data.standings;
-  let html = '';
-  groups.forEach((rows, idx) => {
-    if (groups.length > 1) {
-      const groupName = rows[0]?.group || `Group ${idx + 1}`;
-      html += `<tr class="group-row"><td colspan="11">${groupName}</td></tr>`;
-    }
-    html += rows.map(row => {
-      const formPills = (row.form || '').split('').map(c =>
-        `<span class="form-pill form-pill--${c}">${c}</span>`).join('');
-      const gd = row.goalsDiff;
-      const gdCls = gd > 0 ? 'gd-pos' : gd < 0 ? 'gd-neg' : '';
-      const rankCls = row.rank <= 3 ? 'rank rank--top' : 'rank';
-      return `
-        <tr>
-          <td><span class="${rankCls}">${row.rank}</span></td>
-          <td class="t-left">
-            <div class="club-cell">
-              <img src="${row.team.logo}" alt="" loading="lazy" />
-              <span class="club-cell__name">${row.team.name}</span>
-            </div>
-          </td>
-          <td>${row.all.played}</td>
-          <td>${row.all.win}</td>
-          <td>${row.all.draw}</td>
-          <td>${row.all.lose}</td>
-          <td>${row.all.goals.for}</td>
-          <td>${row.all.goals.against}</td>
-          <td class="${gdCls}">${gd > 0 ? '+' + gd : gd}</td>
-          <td class="pts">${row.points}</td>
-          <td class="t-left"><span class="form-pills">${formPills}</span></td>
-        </tr>`;
-    }).join('');
-  });
-  tbody.innerHTML = html;
+  tbody.innerHTML = rows.map((row, i) => {
+    const rank = parseInt(row.intRank, 10) || (i + 1);
+    const gd = parseInt(row.intGoalDifference, 10) || 0;
+    const gdCls = gd > 0 ? 'gd-pos' : gd < 0 ? 'gd-neg' : '';
+    const rankCls = rank <= 3 ? 'rank rank--top' : 'rank';
+    const formPills = (row.strForm || '').split('').slice(-5).map(c =>
+      `<span class="form-pill form-pill--${c}">${c}</span>`).join('');
+    return `
+      <tr>
+        <td><span class="${rankCls}">${rank}</span></td>
+        <td class="t-left">
+          <div class="club-cell">
+            ${row.strBadge ? `<img src="${row.strBadge}/tiny" alt="" loading="lazy" onerror="this.style.display='none'" />` : ''}
+            <span class="club-cell__name">${row.strTeam}</span>
+          </div>
+        </td>
+        <td>${row.intPlayed ?? '-'}</td>
+        <td>${row.intWin ?? '-'}</td>
+        <td>${row.intDraw ?? '-'}</td>
+        <td>${row.intLoss ?? '-'}</td>
+        <td>${row.intGoalsFor ?? '-'}</td>
+        <td>${row.intGoalsAgainst ?? '-'}</td>
+        <td class="${gdCls}">${gd > 0 ? '+' + gd : gd}</td>
+        <td class="pts">${row.intPoints ?? '-'}</td>
+        <td class="t-left"><span class="form-pills">${formPills}</span></td>
+      </tr>`;
+  }).join('');
 }
 
-function renderMatchList(containerId, fixtures, mode) {
+function renderEvents(containerId, events, mode) {
   const el = document.getElementById(containerId);
-  if (!fixtures || !fixtures.length) {
-    el.innerHTML = `<div class="empty">No matches in this window.</div>`;
+  if (!events || !events.length) {
+    el.innerHTML = `<div class="empty">No matches available right now.</div>`;
     return;
   }
-  el.innerHTML = fixtures.map(f => {
-    const home = f.teams.home, away = f.teams.away;
-    const gh = f.goals.home, ga = f.goals.away;
-    const status = f.fixture.status.short;
-    const isFinished = ['FT','AET','PEN'].includes(status);
-    const round = f.league?.round || '';
+  el.innerHTML = events.map(ev => {
+    const home = ev.strHomeTeam || '';
+    const away = ev.strAwayTeam || '';
+    const homeBadge = ev.strHomeTeamBadge || '';
+    const awayBadge = ev.strAwayTeamBadge || '';
+    const gh = ev.intHomeScore;
+    const ga = ev.intAwayScore;
+    const isFinished = (ev.strStatus === 'Match Finished') || (gh != null && ga != null && mode !== 'fixtures');
+    const round = ev.intRound ? `Round ${ev.intRound}` : '';
     const centre = mode === 'fixtures'
       ? `<div class="match__score match__score--vs">vs</div>`
       : `<div class="match__score">${gh ?? '-'} : ${ga ?? '-'}</div>`;
     const subline = mode === 'fixtures'
-      ? fmtTime(f.fixture.date)
-      : (isFinished ? 'Full time' : status);
+      ? fmtTime(ev.strTime)
+      : (isFinished ? 'Full time' : (ev.strStatus || ''));
     const when = `<div class="match__when">
-        <strong>${fmtDate(f.fixture.date)}</strong>
+        <strong>${fmtDate(ev.dateEvent)}</strong>
         ${subline}
         ${round ? `<span class="match__round">${round}</span>` : ''}
       </div>`;
+    const homeImg = homeBadge ? `<img src="${homeBadge}/tiny" alt="" loading="lazy" onerror="this.style.display='none'" />` : '';
+    const awayImg = awayBadge ? `<img src="${awayBadge}/tiny" alt="" loading="lazy" onerror="this.style.display='none'" />` : '';
     return `
       <div class="match">
         ${when}
-        <div class="match__team"><img src="${home.logo}" alt="" loading="lazy" /><span>${home.name}</span></div>
+        <div class="match__team">${homeImg}<span>${home}</span></div>
         ${centre}
-        <div class="match__team match__team--away"><span>${away.name}</span><img src="${away.logo}" alt="" loading="lazy" /></div>
+        <div class="match__team match__team--away"><span>${away}</span>${awayImg}</div>
       </div>`;
   }).join('');
 }
 
-function renderLive(json) {
+function renderLive(events) {
+  // TheSportsDB free has no real livescore endpoint — best we can do is
+  // surface today's events from past+next as "in play" if dates match today.
   const el = document.getElementById('live-body');
-  const fixtures = json.response || [];
-  if (!fixtures.length) {
-    el.innerHTML = `<div class="empty">No matches in play right now for this competition.</div>`;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayEvents = (events || []).filter(ev => ev.dateEvent === today);
+  if (!todayEvents.length) {
+    el.innerHTML = `<div class="empty">No matches scheduled today for this competition.<br><br><span style="font-size:11px;color:var(--ink-faint);text-transform:none;letter-spacing:.05em">Note: in-play live scores require a TheSportsDB premium key (€9/month). Today's fixtures shown here will update with final scores when matches finish.</span></div>`;
     return;
   }
-  el.innerHTML = fixtures.map(f => {
-    const home = f.teams.home, away = f.teams.away;
-    const gh = f.goals.home ?? 0, ga = f.goals.away ?? 0;
-    const minute = f.fixture.status.elapsed
-      ? `${f.fixture.status.elapsed}'`
-      : f.fixture.status.long;
+  el.innerHTML = todayEvents.map(ev => {
+    const gh = ev.intHomeScore, ga = ev.intAwayScore;
+    const hasScore = gh != null && ga != null;
+    const status = ev.strStatus || (hasScore ? 'In progress' : `Kicks off ${fmtTime(ev.strTime)}`);
+    const homeBadge = ev.strHomeTeamBadge ? `<img src="${ev.strHomeTeamBadge}/tiny" alt="" />` : '';
+    const awayBadge = ev.strAwayTeamBadge ? `<img src="${ev.strAwayTeamBadge}/tiny" alt="" />` : '';
     return `
       <div class="match">
         <div class="match__row">
-          <span class="match__live-tag">Live</span>
-          <span class="match__minute">${minute}</span>
+          <span class="match__live-tag">Today</span>
+          <span class="match__minute">${status}</span>
         </div>
         <div class="match__row">
-          <div class="match__team"><img src="${home.logo}" alt="" /><span>${home.name}</span></div>
-          <div class="match__score">${gh}</div>
+          <div class="match__team">${homeBadge}<span>${ev.strHomeTeam}</span></div>
+          <div class="match__score">${gh ?? '-'}</div>
         </div>
         <div class="match__row">
-          <div class="match__team"><img src="${away.logo}" alt="" /><span>${away.name}</span></div>
-          <div class="match__score">${ga}</div>
+          <div class="match__team">${awayBadge}<span>${ev.strAwayTeam}</span></div>
+          <div class="match__score">${ga ?? '-'}</div>
         </div>
       </div>`;
-  }).join('');
-}
-
-function renderPlayerLeaderboard(tableId, json, statKey) {
-  const tbody = document.querySelector(`#${tableId} tbody`);
-  const rows = json.response || [];
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty">Not available for this competition / season yet.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = rows.slice(0, 25).map((row, i) => {
-    const p = row.player;
-    const stats = row.statistics?.[0];
-    if (!stats) return '';
-    const stat = statKey === 'goals' ? stats.goals.total : stats.goals.assists;
-    const apps = stats.games?.appearences ?? '-';
-    const mins = stats.games?.minutes ?? '-';
-    const team = stats.team?.name ?? '-';
-    const teamLogo = stats.team?.logo ?? '';
-    return `
-      <tr>
-        <td><span class="rank ${i < 3 ? 'rank--top' : ''}">${i + 1}</span></td>
-        <td class="t-left"><strong>${p.name}</strong></td>
-        <td class="t-left">
-          <div class="club-cell">
-            ${teamLogo ? `<img src="${teamLogo}" alt="" loading="lazy" />` : ''}
-            <span>${team}</span>
-          </div>
-        </td>
-        <td>${apps}</td>
-        <td>${mins}</td>
-        <td class="pts">${stat ?? 0}</td>
-      </tr>`;
   }).join('');
 }
 
@@ -380,73 +297,42 @@ function renderPlayerLeaderboard(tableId, json, statKey) {
    Tab loaders
    ------------------------------------------------------------------ */
 async function loadStandings(force = false) {
-  try { renderStandings(await fetchStandings(force)); }
+  try { renderTable(await fetchTable(force)); }
   catch (e) { showError(e); }
 }
 async function loadLive(force = false) {
-  try { renderLive(await fetchLive(force)); }
-  catch (e) { showError(e); }
+  try {
+    // Combine past & next events to detect anything happening today
+    const [past, next] = await Promise.all([
+      fetchPastEvents(force).catch(() => ({ events: [] })),
+      fetchNextEvents(force).catch(() => ({ events: [] }))
+    ]);
+    const all = [...(past.events || []), ...(next.events || [])];
+    renderLive(all);
+  } catch (e) { showError(e); }
 }
 async function loadFixtures(force = false) {
   try {
-    const l = getLeague();
-    let fixtures;
-    if (l.type === 'cup') {
-      const json = await fetchAllSeasonFixtures(force);
-      fixtures = (json.response || [])
-        .filter(f => !['FT','AET','PEN','CANC','PST','ABD'].includes(f.fixture.status.short))
-        .sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date))
-        .slice(0, 30);
-    } else {
-      const today = new Date();
-      const from = today.toISOString().slice(0, 10);
-      const to   = new Date(today.getTime() + 14 * 86_400_000).toISOString().slice(0, 10);
-      const json = await fetchFixtures({ from, to, force });
-      fixtures = (json.response || [])
-        .filter(f => !['FT','AET','PEN'].includes(f.fixture.status.short))
-        .sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
-    }
-    renderMatchList('fixtures-body', fixtures, 'fixtures');
+    const json = await fetchNextEvents(force);
+    const events = (json.events || []).sort((a, b) =>
+      (a.dateEvent + a.strTime).localeCompare(b.dateEvent + b.strTime));
+    renderEvents('fixtures-body', events, 'fixtures');
   } catch (e) { showError(e); }
 }
 async function loadResults(force = false) {
   try {
-    const l = getLeague();
-    let fixtures;
-    if (l.type === 'cup') {
-      const json = await fetchAllSeasonFixtures(force);
-      fixtures = (json.response || [])
-        .filter(f => ['FT','AET','PEN'].includes(f.fixture.status.short))
-        .sort((a, b) => new Date(b.fixture.date) - new Date(a.fixture.date))
-        .slice(0, 30);
-    } else {
-      const today = new Date();
-      const from = new Date(today.getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
-      const to   = today.toISOString().slice(0, 10);
-      const json = await fetchFixtures({ from, to, force });
-      fixtures = (json.response || [])
-        .filter(f => ['FT','AET','PEN'].includes(f.fixture.status.short))
-        .sort((a, b) => new Date(b.fixture.date) - new Date(a.fixture.date));
-    }
-    renderMatchList('results-body', fixtures, 'results');
+    const json = await fetchPastEvents(force);
+    const events = (json.events || []).sort((a, b) =>
+      (b.dateEvent + (b.strTime || '')).localeCompare(a.dateEvent + (a.strTime || '')));
+    renderEvents('results-body', events, 'results');
   } catch (e) { showError(e); }
-}
-async function loadScorers(force = false) {
-  try { renderPlayerLeaderboard('scorers-table', await fetchTopScorers(force), 'goals'); }
-  catch (e) { showError(e); }
-}
-async function loadAssists(force = false) {
-  try { renderPlayerLeaderboard('assists-table', await fetchTopAssists(force), 'assists'); }
-  catch (e) { showError(e); }
 }
 
 const TAB_LOADERS = {
   live:      loadLive,
   standings: loadStandings,
   fixtures:  loadFixtures,
-  results:   loadResults,
-  scorers:   loadScorers,
-  assists:   loadAssists
+  results:   loadResults
 };
 
 /* ------------------------------------------------------------------
@@ -483,11 +369,11 @@ function setActiveTab(name) {
 let liveTimer = null;
 function manageLivePoll(name) {
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
-  if (name === 'live') liveTimer = setInterval(() => loadLive(true), 60_000);
+  if (name === 'live') liveTimer = setInterval(() => loadLive(true), 90_000);
 }
 
 /* ------------------------------------------------------------------
-   League selector dropdown
+   League selector
    ------------------------------------------------------------------ */
 function buildLeagueMenu() {
   const menu = document.getElementById('league-menu');
@@ -505,7 +391,6 @@ function buildLeagueMenu() {
       `).join('')}
     </div>
   `).join('');
-
   menu.querySelectorAll('.lm-item').forEach(btn => {
     btn.addEventListener('click', () => {
       switchLeague(parseInt(btn.dataset.id, 10));
@@ -513,7 +398,6 @@ function buildLeagueMenu() {
     });
   });
 }
-
 const openLeagueMenu   = () => document.getElementById('league-picker').classList.add('is-open');
 const closeLeagueMenu  = () => document.getElementById('league-picker').classList.remove('is-open');
 const toggleLeagueMenu = () => document.getElementById('league-picker').classList.toggle('is-open');
@@ -526,18 +410,12 @@ function refreshLeagueButton() {
     btn.classList.toggle('is-current', parseInt(btn.dataset.id, 10) === l.id);
   });
 }
-
 function switchLeague(id) {
   setLeagueId(id);
   refreshLeagueButton();
   renderHeader();
-  // Reset every panel back to "Loading..."
   document.querySelector('#standings-table tbody').innerHTML =
     '<tr><td colspan="11" class="empty">Loading…</td></tr>';
-  document.querySelector('#scorers-table tbody').innerHTML =
-    '<tr><td colspan="6" class="empty">Loading…</td></tr>';
-  document.querySelector('#assists-table tbody').innerHTML =
-    '<tr><td colspan="6" class="empty">Loading…</td></tr>';
   document.getElementById('live-body').innerHTML     = '<div class="empty">Loading…</div>';
   document.getElementById('fixtures-body').innerHTML = '<div class="empty">Loading…</div>';
   document.getElementById('results-body').innerHTML  = '<div class="empty">Loading…</div>';
@@ -557,8 +435,14 @@ function initButtons() {
     showToast('Refreshing ' + activeTab + '…');
   });
   document.getElementById('reset-key-btn').addEventListener('click', () => {
-    if (confirm('Clear stored API key? You will need to re-enter it.')) {
-      clearKey(); location.reload();
+    if (confirm('Clear stored premium API key (if any) and revert to free key?')) {
+      clearKey();
+      // Clear the cache too, since data may have come from premium endpoints
+      Object.keys(localStorage)
+        .filter(k => k.startsWith(LS.CACHE_PREFIX))
+        .forEach(k => localStorage.removeItem(k));
+      showToast('Reset to free tier');
+      TAB_LOADERS[activeTab]?.(true);
     }
   });
   document.getElementById('league-picker-btn').addEventListener('click', (e) => {
@@ -569,46 +453,12 @@ function initButtons() {
     if (!e.target.closest('#league-picker')) closeLeagueMenu();
   });
 }
-function initKeyGate() {
-  const gate = document.getElementById('key-gate');
-  const form = document.getElementById('key-form');
-  const input = document.getElementById('key-input');
-  const errEl = document.getElementById('key-error');
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    errEl.textContent = '';
-    const k = input.value.trim();
-    if (k.length < 20) {
-      errEl.textContent = 'That key looks too short. Double-check it.';
-      return;
-    }
-    setKey(k);
-    try {
-      await apiGet('/status', {}, 0, { force: true });
-      gate.classList.add('hidden');
-      bootAfterKey();
-    } catch (e) {
-      clearKey();
-      errEl.textContent = e.message;
-    }
-  });
-
-  if (!getKey()) gate.classList.remove('hidden');
-  else { gate.classList.add('hidden'); bootAfterKey(); }
-}
-
-async function bootAfterKey() {
-  buildLeagueMenu();
-  refreshLeagueButton();
-  renderHeader();
-  renderQuota();
-  setActiveTab('standings');
-}
 
 document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   initButtons();
-  initKeyGate();
-  renderQuota();
+  buildLeagueMenu();
+  refreshLeagueButton();
+  renderHeader();
+  setActiveTab('standings');
 });

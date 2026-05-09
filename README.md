@@ -1,31 +1,32 @@
 # The Pitch — football tracker
 
-A single-page football tracker covering 23 leagues and cups, with live scores, standings, fixtures, results and player leaderboards. Powered by the free tier of [API-Football](https://www.api-football.com/).
+A single-page football tracker covering 17 leagues and cups, with standings, fixtures, results and today's matches. Powered by [TheSportsDB](https://www.thesportsdb.com/) — a free, crowd-sourced sports database.
+
+**No signup. No API key. No quota. Just open it and go.**
 
 Pure HTML / CSS / vanilla JS. No build step. Deploys straight to GitHub Pages.
 
-## Leagues covered
+## What's covered
 
 | Group          | Competitions |
 |----------------|--------------|
-| South Africa   | Premier Soccer League · National First Division |
-| England        | Premier League · Championship · FA Cup · EFL Cup |
-| Europe         | La Liga · Serie A · Bundesliga · Ligue 1 · Eredivisie · Primeira Liga |
-| Continental    | Champions League · Europa League · Conference League · CAF Champions League |
-| International  | World Cup · Euros · AFCON · Copa America |
-| Americas       | Brasileirão · Argentina LPF · MLS |
+| South Africa   | PSL (Betway Premiership) |
+| England        | Premier League · Championship · FA Cup |
+| Europe         | La Liga · Serie A · Bundesliga · Ligue 1 · Eredivisie |
+| Continental    | UEFA Champions League · Europa League · Conference League |
+| International  | FIFA World Cup · Africa Cup of Nations · Copa America |
+| Americas       | Brasileirão · MLS |
 
-Switch between them via the dropdown in the header. Each league's data caches independently.
+Switch between them via the dropdown in the header.
 
 ## Features
 
-- **Standings** with form pills (last 5). Cup competitions show group stages where applicable.
-- **Live matches** with auto-refresh every 60 seconds (only while the tab is active)
-- **Fixtures** for the next 14 days (leagues) or upcoming rounds (cups)
-- **Results** for the past 14 days (leagues) or recent rounds (cups)
-- **Top scorers** and **top assists** leaderboards
-- **Built-in daily quota counter** (UTC, matches API-Football's reset)
-- **Aggressive client-side caching** so a casual browse burns ~5–10 requests
+- **Standings** with W/D/L form pills (last 5 matches)
+- **Today's matches** with kickoff times and status, auto-refreshing every 90 seconds
+- **Fixtures** — next 15 scheduled matches
+- **Results** — last 15 completed matches
+- **Aggressive client-side caching** — standings cached 1 hour, events 30 minutes
+- **Sensible defaults for cup competitions** (no league table → friendly message)
 
 ## How to deploy to GitHub Pages
 
@@ -33,58 +34,56 @@ Switch between them via the dropdown in the header. Each league's data caches in
 2. Upload the three files — `index.html`, `styles.css`, `app.js` — to the root.
 3. Go to **Settings → Pages**.
 4. Under **Source**, choose **Deploy from a branch**, select `main` and `/ (root)`, hit Save.
-5. Your site will be live in ~1 minute at `https://<your-username>.github.io/the-pitch/`.
+5. Your site goes live in ~60 seconds at `https://<your-username>.github.io/the-pitch/`.
 
-## How to use
+That's it. No API key gate, no signup step. Just open the URL.
 
-1. Get a free API key at https://dashboard.api-football.com/register (no credit card needed, 100 requests/day).
-2. Open the site. The key gate appears.
-3. Paste your key. It's stored in your browser's `localStorage` only.
-4. Pick a league from the dropdown. Click any tab to load it.
+## Why TheSportsDB instead of API-Football?
 
-## Important: the API key is in the browser
+Honest tradeoff:
 
-GitHub Pages serves only static files. There is no backend, so the key has to live in the browser. Three things to know:
+| Feature                   | API-Football        | TheSportsDB (used here)    |
+|---------------------------|---------------------|----------------------------|
+| Signup required           | Yes                 | **No**                     |
+| Daily quota               | 100 requests        | **None on free tier**      |
+| Live in-play scores       | Yes (15s refresh)   | Premium only (€9/mo)       |
+| Account suspension risk   | Yes (if you exceed) | **No**                     |
+| Standings, fixtures, results | Yes              | Yes                        |
+| Top scorers / assists     | Yes                 | No (not on free tier)      |
+| Coverage                  | 1,200+ leagues      | Most major leagues         |
 
-- **The key is yours.** Anyone who opens your deployed site has to enter their own key. Yours is never bundled into the code.
-- **If you share the URL**, visitors enter their own key. They cannot see yours.
-- **Don't paste your key into the source code or commit it to the repo.** The app keeps the key in `localStorage` only.
+For a casual tracker that just works, TheSportsDB wins because it never breaks on you. The honest catch: you can see today's match status (kickoff time, full time, scores when they're entered), but you don't get the live ticker showing the 67th minute as it ticks. For PSL and most leagues, scores update fairly soon after matches end.
 
-## Quota strategy
+## Upgrading later
 
-The free tier gives 100 requests/day, resetting at 00:00 UTC. The app caches each endpoint with a TTL appropriate to how often the data actually changes:
+If you ever want live in-play scoring, sign up for TheSportsDB Patreon supporter tier (€9/month). They give you a personal key that you paste into the **⚙ Key** button in the header. The app stores it in `localStorage` only, never committed to your repo.
 
-| Data            | TTL          | Why                              |
-|-----------------|--------------|----------------------------------|
-| Standings       | 1 hour       | API updates hourly anyway        |
-| Fixtures list   | 6 hours      | Schedules rarely change          |
-| Live scores     | 1 minute     | Updated every 15s by the API     |
-| Top scorers     | 12 hours     | Slow-moving                      |
-| Top assists     | 12 hours     | Slow-moving                      |
+To revert to free, click ⚙ Key again and confirm. The app will fall back to the public `123` key.
 
-Switching leagues triggers a fresh fetch for that league, but each league's cache is preserved — flicking PSL → EPL → PSL within an hour costs you nothing the second time.
+## Customisation
 
-A typical session opens 2–3 tabs across one league = ~5 requests. Sitting on the live tab during a 90-min match = ~90 requests. Budget your live-tab time.
+The league catalogue is a hand-picked list at the top of `app.js`. To add a league:
 
-## Adding more leagues
-
-The catalogue is hand-curated for sensible defaults, but adding new ones is one line. Open `app.js`, find the `LEAGUES` array, and add an entry:
+1. Find its ID by visiting `https://www.thesportsdb.com/` and looking for the league. The URL will show the ID, e.g. `/league/4328-english-premier-league` → ID is `4328`.
+2. Add an entry to the `LEAGUES` array:
 
 ```js
-{ id: 71, name: 'Brasileirão Série A', short: 'Brasil A',
-  country: 'Brazil', flag: '🇧🇷',
-  type: 'league',          // 'league' or 'cup'
-  seasonStyle: 'mar-nov',  // 'aug-may', 'mar-nov', or 'tournament'
-  group: 'Americas' }
+{ id: 4328,
+  name: 'Premier League',
+  short: 'EPL',
+  flag: '🏴',
+  group: 'England',
+  seasonStyle: 'aug-may'  // or 'mar-nov' or 'tournament'
+}
 ```
 
-To find a league ID, log in at the API-Football dashboard and use the IDs section, or call `/leagues?country=Country-Name` from your browser with your API key.
+3. Optionally add `type: 'cup'` for cup competitions (suppresses the "no standings" warning).
 
 ## Files
 
 ```
 the-pitch/
-├── index.html     # markup, sections, key gate, league picker
+├── index.html     # markup, league picker, tabs
 ├── styles.css     # editorial dark theme
 ├── app.js         # API client, caching, league catalogue, renderers
 └── README.md      # this file
@@ -92,5 +91,5 @@ the-pitch/
 
 ## Credits
 
-- Data: [API-Football](https://www.api-football.com/) (api-sports.io)
+- Data: [TheSportsDB](https://www.thesportsdb.com/) (crowd-sourced, free public API)
 - Fonts: Fraunces, Inter, JetBrains Mono (Google Fonts)

@@ -4,30 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>The Pitch — Football Tracker</title>
-  <meta name="description" content="Live scores, fixtures, results, standings and stats for football leagues and cups around the world." />
+  <meta name="description" content="Live scores, fixtures, results and standings for football leagues and cups around the world. Powered by TheSportsDB." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,400&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-
-  <!-- API key gate -->
-  <div id="key-gate" class="key-gate hidden">
-    <div class="key-gate__panel">
-      <div class="key-gate__eyebrow">Setup</div>
-      <h1 class="key-gate__title">Enter your API-Football key</h1>
-      <p class="key-gate__body">
-        Get a free key at <a href="https://dashboard.api-football.com/register" target="_blank" rel="noopener">dashboard.api-football.com</a>.
-        100 requests / day on the free plan. Your key is stored locally in your browser only — it is never sent anywhere except api-sports.io.
-      </p>
-      <form id="key-form" class="key-gate__form">
-        <input type="password" id="key-input" placeholder="Paste your API key here" autocomplete="off" required />
-        <button type="submit">Save &amp; continue</button>
-      </form>
-      <p class="key-gate__footnote" id="key-error"></p>
-    </div>
-  </div>
 
   <!-- Header -->
   <header class="masthead">
@@ -42,7 +25,6 @@
       </div>
 
       <div class="masthead__meta">
-        <!-- League picker -->
         <div class="league-picker" id="league-picker">
           <button class="league-picker__btn" id="league-picker-btn" aria-haspopup="listbox">
             <span class="league-picker__flag" id="league-picker-flag">🇿🇦</span>
@@ -54,42 +36,32 @@
           <div class="league-menu" id="league-menu" role="listbox"></div>
         </div>
 
-        <div class="quota">
-          <span class="quota__label">Daily quota</span>
-          <span class="quota__value"><span id="quota-used">0</span> / <span id="quota-limit">100</span></span>
-          <span class="quota__bar"><span id="quota-fill" class="quota__fill"></span></span>
-        </div>
-
         <div class="masthead__actions">
           <button id="refresh-btn" class="ghost-btn" title="Refresh active panel">↻ Refresh</button>
-          <button id="reset-key-btn" class="ghost-btn" title="Clear stored API key">⚙ Key</button>
+          <button id="reset-key-btn" class="ghost-btn" title="Reset to free tier">⚙ Key</button>
         </div>
       </div>
     </div>
 
     <nav class="tabs" role="tablist">
-      <button class="tab" data-tab="live" role="tab">Live now</button>
+      <button class="tab" data-tab="live" role="tab">Today</button>
       <button class="tab is-active" data-tab="standings" role="tab">Standings</button>
       <button class="tab" data-tab="fixtures" role="tab">Fixtures</button>
       <button class="tab" data-tab="results" role="tab">Results</button>
-      <button class="tab" data-tab="scorers" role="tab">Top scorers</button>
-      <button class="tab" data-tab="assists" role="tab">Top assists</button>
     </nav>
   </header>
 
   <main class="content">
-    <!-- LIVE -->
     <section class="panel" data-panel="live" hidden>
       <div class="panel__head">
-        <h2 class="panel__title">Live matches</h2>
-        <p class="panel__hint">Refreshes automatically every 60 seconds while a match is in play.</p>
+        <h2 class="panel__title">Today's matches</h2>
+        <p class="panel__hint">Refreshes every 90 seconds while this tab is active.</p>
       </div>
       <div id="live-body" class="live-grid">
         <div class="empty">Loading…</div>
       </div>
     </section>
 
-    <!-- STANDINGS -->
     <section class="panel is-active" data-panel="standings">
       <div class="panel__head">
         <h2 class="panel__title">League table</h2>
@@ -117,78 +89,30 @@
       </div>
     </section>
 
-    <!-- FIXTURES -->
     <section class="panel" data-panel="fixtures" hidden>
       <div class="panel__head">
         <h2 class="panel__title">Upcoming fixtures</h2>
-        <p class="panel__hint">Next 14 days for leagues · upcoming rounds for cups.</p>
+        <p class="panel__hint">Next 15 scheduled matches.</p>
       </div>
       <div id="fixtures-body" class="match-list">
         <div class="empty">Loading…</div>
       </div>
     </section>
 
-    <!-- RESULTS -->
     <section class="panel" data-panel="results" hidden>
       <div class="panel__head">
         <h2 class="panel__title">Recent results</h2>
-        <p class="panel__hint">Last 14 days for leagues · most recent rounds for cups.</p>
+        <p class="panel__hint">Last 15 completed matches.</p>
       </div>
       <div id="results-body" class="match-list">
         <div class="empty">Loading…</div>
-      </div>
-    </section>
-
-    <!-- TOP SCORERS -->
-    <section class="panel" data-panel="scorers" hidden>
-      <div class="panel__head">
-        <h2 class="panel__title">Top scorers</h2>
-        <p class="panel__hint">Goals leaderboard for the current season.</p>
-      </div>
-      <div class="table-wrap">
-        <table class="table" id="scorers-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th class="t-left">Player</th>
-              <th class="t-left">Team</th>
-              <th>Apps</th>
-              <th>Mins</th>
-              <th>Goals</th>
-            </tr>
-          </thead>
-          <tbody><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- TOP ASSISTS -->
-    <section class="panel" data-panel="assists" hidden>
-      <div class="panel__head">
-        <h2 class="panel__title">Top assists</h2>
-        <p class="panel__hint">Assists leaderboard for the current season.</p>
-      </div>
-      <div class="table-wrap">
-        <table class="table" id="assists-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th class="t-left">Player</th>
-              <th class="t-left">Team</th>
-              <th>Apps</th>
-              <th>Mins</th>
-              <th>Assists</th>
-            </tr>
-          </thead>
-          <tbody><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
-        </table>
       </div>
     </section>
   </main>
 
   <footer class="footer">
     <div class="footer__inner">
-      <span>Data: <a href="https://www.api-football.com/" target="_blank" rel="noopener">API-Football</a> (free tier · 100 req/day)</span>
+      <span>Data: <a href="https://www.thesportsdb.com/" target="_blank" rel="noopener">TheSportsDB</a> · free, crowd-sourced, no signup</span>
       <span id="last-updated">Last updated: never</span>
     </div>
   </footer>
