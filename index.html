@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Pitch — Football Tracker</title>
+  <meta name="description" content="Live scores, fixtures, results and standings for football leagues and cups around the world. Powered by TheSportsDB." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,400&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="masthead">
+    <div class="masthead__inner">
+      <div class="masthead__brand">
+        <span class="masthead__mark">⚽</span>
+        <div>
+          <div class="masthead__kicker">The Pitch</div>
+          <h1 class="masthead__title" id="current-league-name">Loading…</h1>
+          <div class="masthead__sub" id="current-league-meta">—</div>
+        </div>
+      </div>
+
+      <div class="masthead__meta">
+        <div class="league-picker" id="league-picker">
+          <button class="league-picker__btn" id="league-picker-btn" aria-haspopup="listbox">
+            <span class="league-picker__flag" id="league-picker-flag">🇿🇦</span>
+            <span class="league-picker__name" id="league-picker-name">PSL</span>
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M2 3 L5 7 L8 3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="league-menu" id="league-menu" role="listbox"></div>
+        </div>
+
+        <div class="masthead__actions">
+          <button id="refresh-btn" class="ghost-btn" title="Refresh active panel">↻ Refresh</button>
+          <button id="reset-key-btn" class="ghost-btn" title="Reset to free tier">⚙ Key</button>
+        </div>
+      </div>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab" data-tab="live" role="tab">Today</button>
+      <button class="tab is-active" data-tab="standings" role="tab">Standings</button>
+      <button class="tab" data-tab="fixtures" role="tab">Fixtures</button>
+      <button class="tab" data-tab="results" role="tab">Results</button>
+    </nav>
+  </header>
+
+  <main class="content">
+    <section class="panel" data-panel="live" hidden>
+      <div class="panel__head">
+        <h2 class="panel__title">Today's matches</h2>
+        <p class="panel__hint">Refreshes every 90 seconds while this tab is active.</p>
+      </div>
+      <div id="live-body" class="live-grid">
+        <div class="empty">Loading…</div>
+      </div>
+    </section>
+
+    <section class="panel is-active" data-panel="standings">
+      <div class="panel__head">
+        <h2 class="panel__title">League table</h2>
+        <p class="panel__hint" id="standings-meta">—</p>
+      </div>
+      <div class="table-wrap">
+        <table class="table table--standings" id="standings-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th class="t-left">Club</th>
+              <th>P</th>
+              <th>W</th>
+              <th>D</th>
+              <th>L</th>
+              <th>GF</th>
+              <th>GA</th>
+              <th>GD</th>
+              <th>Pts</th>
+              <th class="t-left">Form</th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="11" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="fixtures" hidden>
+      <div class="panel__head">
+        <h2 class="panel__title">Upcoming fixtures</h2>
+        <p class="panel__hint">Next 15 scheduled matches.</p>
+      </div>
+      <div id="fixtures-body" class="match-list">
+        <div class="empty">Loading…</div>
+      </div>
+    </section>
+
+    <section class="panel" data-panel="results" hidden>
+      <div class="panel__head">
+        <h2 class="panel__title">Recent results</h2>
+        <p class="panel__hint">Last 15 completed matches.</p>
+      </div>
+      <div id="results-body" class="match-list">
+        <div class="empty">Loading…</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer__inner">
+      <span>Data: <a href="https://www.thesportsdb.com/" target="_blank" rel="noopener">TheSportsDB</a> · free, crowd-sourced, no signup</span>
+      <span id="last-updated">Last updated: never</span>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
