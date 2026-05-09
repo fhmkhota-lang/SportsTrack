@@ -56,7 +56,7 @@ const TTL = {
 const LS = {
   KEY:           'pitch.apikey',     // optional, only if user has premium
   LEAGUE_ID:     'pitch.league.id',
-  CACHE_PREFIX:  'pitch.cache.'
+  CACHE_PREFIX:  'pitch.v2.cache.'   // bumped to invalidate any stale entries
 };
 
 const getKey = () => localStorage.getItem(LS.KEY) || FREE_KEY;
@@ -120,7 +120,12 @@ async function apiGet(path, params = {}, ttl = 60_000, { force = false } = {}) {
   }
 
   const url = `${API_BASE}/${getKey()}/${path}${qs ? '?' + qs : ''}`;
-  const res = await fetch(url);
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    throw new Error('Network error reaching TheSportsDB. Check your connection.');
+  }
 
   if (res.status === 429)
     throw new Error('TheSportsDB is rate-limiting. Wait a minute and try again.');
@@ -128,7 +133,17 @@ async function apiGet(path, params = {}, ttl = 60_000, { force = false } = {}) {
     throw new Error('Invalid API key. Click ⚙ Key to clear it (free tier needs no key).');
   if (!res.ok) throw new Error(`API error: ${res.status}`);
 
-  const json = await res.json();
+  // TheSportsDB sometimes returns the literal string "null" or HTML on weird
+  // queries. Read as text first so we can give a useful error.
+  const text = await res.text();
+  if (!text || text.trim() === 'null' || text.trim().startsWith('<')) {
+    // Treat as "no data" — return an empty shell so renderers don't crash
+    return { events: [], table: [], leagues: [], teams: [] };
+  }
+  let json;
+  try { json = JSON.parse(text); }
+  catch { return { events: [], table: [], leagues: [], teams: [] }; }
+
   cacheSet(cacheKey, json, ttl);
   return json;
 }
@@ -138,8 +153,16 @@ async function apiGet(path, params = {}, ttl = 60_000, { force = false } = {}) {
    ------------------------------------------------------------------ */
 async function fetchTable(force = false) {
   const l = getLeague();
-  return apiGet('lookuptable.php',
+  // Try with season first (works for featured leagues like EPL, La Liga, PSL)
+  let json = await apiGet('lookuptable.php',
     { l: l.id, s: currentSeasonFor(l) }, TTL.table, { force });
+  // For non-featured leagues, the seasoned query returns empty/null. Retry
+  // without the season — TheSportsDB will return the current default season.
+  if (!json || !json.table || !Array.isArray(json.table) || !json.table.length) {
+    json = await apiGet('lookuptable.php',
+      { l: l.id }, TTL.table, { force });
+  }
+  return json;
 }
 async function fetchNextEvents(force = false) {
   const l = getLeague();
@@ -183,12 +206,13 @@ function renderHeader() {
 
 function renderTable(json) {
   const tbody = document.querySelector('#standings-table tbody');
-  const rows = json?.table || [];
+  // TheSportsDB can return: { table: [...] }, { table: null }, or null itself
+  const rows = Array.isArray(json?.table) ? json.table : [];
   if (!rows.length) {
     const l = getLeague();
     const msg = l.type === 'cup'
       ? 'This is a cup competition — no league table. Check Fixtures and Results for the bracket.'
-      : 'No standings data available for this season yet.';
+      : 'No standings available for this league on TheSportsDB free tier. Try Fixtures and Results — they should still work.';
     tbody.innerHTML = `<tr><td colspan="11" class="empty">${msg}</td></tr>`;
     return;
   }
@@ -205,7 +229,7 @@ function renderTable(json) {
         <td class="t-left">
           <div class="club-cell">
             ${row.strBadge ? `<img src="${row.strBadge}/tiny" alt="" loading="lazy" onerror="this.style.display='none'" />` : ''}
-            <span class="club-cell__name">${row.strTeam}</span>
+            <span class="club-cell__name">${row.strTeam || '—'}</span>
           </div>
         </td>
         <td>${row.intPlayed ?? '-'}</td>
@@ -302,19 +326,21 @@ async function loadStandings(force = false) {
 }
 async function loadLive(force = false) {
   try {
-    // Combine past & next events to detect anything happening today
     const [past, next] = await Promise.all([
       fetchPastEvents(force).catch(() => ({ events: [] })),
       fetchNextEvents(force).catch(() => ({ events: [] }))
     ]);
-    const all = [...(past.events || []), ...(next.events || [])];
+    const all = [
+      ...(Array.isArray(past.events) ? past.events : []),
+      ...(Array.isArray(next.events) ? next.events : [])
+    ];
     renderLive(all);
   } catch (e) { showError(e); }
 }
 async function loadFixtures(force = false) {
   try {
     const json = await fetchNextEvents(force);
-    const events = (json.events || []).sort((a, b) =>
+    const events = (Array.isArray(json.events) ? json.events : []).sort((a, b) =>
       (a.dateEvent + a.strTime).localeCompare(b.dateEvent + b.strTime));
     renderEvents('fixtures-body', events, 'fixtures');
   } catch (e) { showError(e); }
@@ -322,7 +348,7 @@ async function loadFixtures(force = false) {
 async function loadResults(force = false) {
   try {
     const json = await fetchPastEvents(force);
-    const events = (json.events || []).sort((a, b) =>
+    const events = (Array.isArray(json.events) ? json.events : []).sort((a, b) =>
       (b.dateEvent + (b.strTime || '')).localeCompare(a.dateEvent + (a.strTime || '')));
     renderEvents('results-body', events, 'results');
   } catch (e) { showError(e); }
@@ -392,7 +418,8 @@ function buildLeagueMenu() {
     </div>
   `).join('');
   menu.querySelectorAll('.lm-item').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       switchLeague(parseInt(btn.dataset.id, 10));
       closeLeagueMenu();
     });

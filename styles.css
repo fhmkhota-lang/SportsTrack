@@ -173,6 +173,7 @@ a:hover { text-decoration: underline; }
   cursor: pointer;
   transition: background .12s;
 }
+.lm-item > * { pointer-events: none; }
 .lm-item:hover { background: rgba(255,91,31,.08); }
 .lm-item.is-current { background: rgba(255,91,31,.15); color: var(--accent); }
 .lm-item__flag { font-size: 14px; }
