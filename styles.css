@@ -154,7 +154,7 @@ code {
    ------------------------------------------------------------------ */
 .masthead {
   position: relative;
-  z-index: 2;
+  z-index: 100;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(255,91,31,.04), transparent 60%), var(--bg-soft);
 }
@@ -230,9 +230,9 @@ code {
   max-height: min(calc(100vh - 100px), 720px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  z-index: 50;
+  z-index: 1000;
   display: none;
-  box-shadow: 0 20px 60px rgba(0,0,0,.4);
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
 }
 .league-menu::before {
   content: "";
@@ -337,7 +337,7 @@ code {
   margin: 0 auto;
   padding: 40px 32px 60px;
   position: relative;
-  z-index: 2;
+  z-index: 1;
 }
 .panel { display: none; animation: fadein .25s ease; }
 .panel.is-active { display: block; }

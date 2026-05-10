@@ -126,7 +126,7 @@ function renderMatches(containerId, matches, mode) {
       ? `<div class="match__score match__score--vs">vs</div>`
       : `<div class="match__score">${home.score ?? '-'} : ${away.score ?? '-'}</div>`;
     const subline = mode === 'fixtures'
-      ? fmtTime(m.kickoff)
+      ? (m.kickoffHasTime !== false ? fmtTime(m.kickoff) : 'Time TBC')
       : (isFinished ? 'Full time' : (m.status || ''));
     const round = m.round || '';
     const when = `<div class="match__when">
